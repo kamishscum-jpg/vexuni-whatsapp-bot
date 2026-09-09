@@ -1,0 +1,15 @@
+{
+  "name": "vexuni-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Vexluni WhatsApp Bot with Baileys",
+  "main": "src/bot.js",
+  "scripts": { "start": "node src/bot.js" },
+  "engines": { "node": ">=18.x" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "pino": "^8.17.2",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
