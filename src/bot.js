@@ -1257,7 +1257,7 @@ async function startBot() {
     async ({ messages }) => {
       try {
         const message =
-          Here's **exactly what goes at line 1260**. Delete everything from line 1260 onwards and paste this:
+        
 
 ```javascript
         const jid = message.key.remoteJid;
@@ -1338,7 +1338,7 @@ async function startBot() {
         // GENERATE (PREMIUM ONLY)
         if (command === "generate") {
           if (!isPremium(sender)) {
-            await sendText(sock, jid, `🔒 ${PREFIX}generate is for Premium / VIP users only.\n\n/premium to get premium.`, message);
+            await sendText(sock, jid, `🔒 ${PREFIX}generate is for Premium / VIP users only.\n\n/premium to get premium.`, message);2348135534609
             return;
           }
           if (!argument) {
