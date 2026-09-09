@@ -1257,25 +1257,144 @@ async function startBot() {
     async ({ messages }) => {
       try {
         const message =
-          messages?.[0];
+          Here's **exactly what goes at line 1260**. Delete everything from line 1260 onwards and paste this:
 
-        if (!message?.message) {
+```javascript
+        const jid = message.key.remoteJid;
+        const sender = message.key.participant || jid;
+        const text = getText(message).trim();
+        const isGroup = jid.endsWith("@g.us");
+
+        if (!text) {
           return;
         }
 
-        if (
-            message.key.fromMe || 
-            !message.message
-        ) return;
-        
-        const msg = message.message;
-        const from = message.key.remoteJid;
-   Perfect! Here's the **complete missing code** for your `src/bot.js`. This replaces everything from the truncated `messages.upsert` event onwards:
+        console.log(`[${isGroup ? "GROUP" : "PRIVATE"}] ${jidNumber(sender)}: ${text}`);
 
-```javascript
-  // ===================================================
-  // MESSAGES
-  // ===================================================
+        // ===================================================
+        // COMMAND ROUTING
+        // ===================================================
+
+        const [cmd, ...args] = text.split(" ");
+        const command = cmd.toLowerCase().replace(PREFIX, "");
+        const argument = args.join(" ");
+
+        // MENU
+        if (command === "menu" || command === "help") {
+          await sendText(sock, jid, getMenu(sender), message);
+          return;
+        }
+
+        // STATUS
+        if (command === "status") {
+          const level = getLevel(sender);
+          await sendText(sock, jid, `📊 Your Status:\n\nLevel: ${level}\nJID: ${sender}`, message);
+          return;
+        }
+
+        // AI CHAT (NORMAL - UNLIMITED)
+        if (!command.startsWith(PREFIX.slice(0, 1)) && text) {
+          const reply = await generateAI(text);
+          await sendText(sock, jid, reply, message);
+          return;
+        }
+
+        // ===================================================
+        // IMAGE GENERATION
+        // ===================================================
+
+        if (command === "image" || command === "img") {
+          if (!argument) {
+            await sendText(sock, jid, `❌ Usage: ${PREFIX}image <prompt>`, message);
+            return;
+          }
+
+          const limit = checkImageLimit(sender);
+          if (!limit.allowed) {
+            const wait = formatTime(limit.wait);
+            await sendText(sock, jid, `⏳ Image limit reached.\n\nRemaining: ${limit.remaining}\nWait: ${wait}`, message);
+            return;
+          }
+
+          await sendText(sock, jid, `🎨 Generating image for: "${argument}"\n\n⏳ Please wait...`, message);
+
+          const imageUrl = await generateImage(argument);
+          if (!imageUrl) {
+            await sendText(sock, jid, `❌ Failed to generate image. Check your IMAGE_API_URL and IMAGE_API_KEY.`, message);
+            return;
+          }
+
+          useImageCredit(sender);
+
+          try {
+            await sock.sendMessage(jid, { image: { url: imageUrl }, caption: `🎨 Generated for: ${sender}\n\n"${argument}"` }, { quoted: message });
+          } catch (error) {
+            console.error("IMAGE SEND ERROR:", error.message);
+            await sendText(sock, jid, `❌ Failed to send image.`, message);
+          }
+          return;
+        }
+
+        // GENERATE (PREMIUM ONLY)
+        if (command === "generate") {
+          if (!isPremium(sender)) {
+            await sendText(sock, jid, `🔒 ${PREFIX}generate is for Premium / VIP users only.\n\n/premium to get premium.`, message);
+            return;
+          }
+          if (!argument) {
+            await sendText(sock, jid, `❌ Usage: ${PREFIX}generate <text>`, message);
+            return;
+          }
+          await sendText(sock, jid, `🤖 Generating with AI...\n\n⏳ Please wait...`, message);
+          const result = await generateAI(argument);
+          await sendText(sock, jid, result, message);
+          return;
+        }
+
+        // ===================================================
+        // FUN COMMANDS
+        // ===================================================
+
+        if (command === "hug") {
+          const mentions = getMentions(message);
+          if (!mentions.length) {
+            await sendText(sock, jid, `❌ Tag someone to hug.`, message);
+            return;
+          }
+          await doAction(sock, jid, mentions[0], "hug", message);
+          return;
+        }
+
+        if (command === "slap") {
+          const mentions = getMentions(message);
+          if (!mentions.length) {
+            await sendText(sock, jid, `❌ Tag someone to slap.`, message);
+            return;
+          }
+          await doAction(sock, jid, mentions[0], "slap", message);
+          return;
+        }
+
+        // ===================================================
+        // DOWNLOAD
+        // ===================================================
+
+        if (command === "download") {
+          if (!argument) {
+            await sendText(sock, jid, `❌ Usage: ${PREFIX}download <URL>`, message);
+            return;
+          }
+          const cooldown = checkDownloadLimit(sender);
+          if (!cooldown.allowed) {
+            const wait = formatTime(cooldown.wait);
+            await sendText(sock, jid, `⏳ Download cooldown active.\n\nWait: ${wait}`, message);
+            return;
+          }
+          useDownloadCredit(sender);
+          await sendText(sock, jid, `📥 Downloading from: ${argument}\n\n⏳ Please wait...`, message);
+          try {
+            const response = await axios.get(argument, { responseType: "arraybuffer", timeout: 60000 });
+            const
 
   sock.ev.on(
     "messages.upsert",
