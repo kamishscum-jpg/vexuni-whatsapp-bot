@@ -1264,4 +1264,14 @@ async function startBot() {
         }
 
         if (
-             message.key.fromMe
+            message.key.fromMe || 
+            !message.message
+        ) return;
+        
+        const msg = message.message;
+        const from = message.key.remoteJid;
+        
+    } catch (error) {
+        console.error(error);
+    }
+});
