@@ -1264,4 +1264,4 @@ async function startBot() {
         }
 
         if (
-          message.key.fro
+             message.key.fromMe
