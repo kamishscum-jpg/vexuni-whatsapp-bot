@@ -1270,8 +1270,817 @@ async function startBot() {
         
         const msg = message.message;
         const from = message.key.remoteJid;
-        
-    } catch (error) {
-        console.error(error);
-    }
-});
+   Perfect! Here's the **complete missing code** for your `src/bot.js`. This replaces everything from the truncated `messages.upsert` event onwards:
+
+```javascript
+  // ===================================================
+  // MESSAGES
+  // ===================================================
+
+  sock.ev.on(
+    "messages.upsert",
+    async ({ messages }) => {
+      try {
+        const message = messages?.[0];
+
+        if (!message?.message) {
+          return;
+        }
+
+        if (message.key.fromMe) {
+          return;
+        }
+
+        const jid = message.key.remoteJid;
+        const sender = message.key.participant || jid;
+        const text = getText(message).trim();
+        const isGroup = jid.endsWith("@g.us");
+
+        if (!text) {
+          return;
+        }
+
+        console.log(`[${isGroup ? "GROUP" : "PRIVATE"}] ${jidNumber(sender)}: ${text}`);
+
+        // ===================================================
+        // COMMAND ROUTING
+        // ===================================================
+
+        const [cmd, ...args] = text.split(" ");
+        const command = cmd.toLowerCase().replace(PREFIX, "");
+        const argument = args.join(" ");
+
+        // MENU
+        if (command === "menu" || command === "help") {
+          await sendText(
+            sock,
+            jid,
+            getMenu(sender),
+            message
+          );
+          return;
+        }
+
+        // STATUS
+        if (command === "status") {
+          const level = getLevel(sender);
+          await sendText(
+            sock,
+            jid,
+            `📊 Your Status:\n\nLevel: ${level}\nJID: ${sender}`,
+            message
+          );
+          return;
+        }
+
+        // AI CHAT (NORMAL - UNLIMITED)
+        if (!command.startsWith(PREFIX.slice(0, 1)) && text) {
+          const reply = await generateAI(text);
+          await sendText(
+            sock,
+            jid,
+            reply,
+            message
+          );
+          return;
+        }
+
+        // ===================================================
+        // IMAGE GENERATION
+        // ===================================================
+
+        if (command === "image" || command === "img") {
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}image <prompt>`,
+              message
+            );
+            return;
+          }
+
+          const limit = checkImageLimit(sender);
+
+          if (!limit.allowed) {
+            const wait = formatTime(limit.wait);
+            await sendText(
+              sock,
+              jid,
+              `⏳ Image limit reached.\n\nRemaining: ${limit.remaining}\nWait: ${wait}`,
+              message
+            );
+            return;
+          }
+
+          await sendText(
+            sock,
+            jid,
+            `🎨 Generating image for: "${argument}"\n\n⏳ Please wait...`,
+            message
+          );
+
+          const imageUrl = await generateImage(argument);
+
+          if (!imageUrl) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to generate image. Check your IMAGE_API_URL and IMAGE_API_KEY.`,
+              message
+            );
+            return;
+          }
+
+          useImageCredit(sender);
+
+          try {
+            await sock.sendMessage(
+              jid,
+              {
+                image: {
+                  url: imageUrl
+                },
+                caption: `🎨 Generated for: ${sender}\n\n"${argument}"`
+              },
+              {
+                quoted: message
+              }
+            );
+          } catch (error) {
+            console.error("IMAGE SEND ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to send image.`,
+              message
+            );
+          }
+          return;
+        }
+
+        // GENERATE (PREMIUM ONLY - AI IMAGE TEXT)
+        if (command === "generate") {
+          if (!isPremium(sender)) {
+            await sendText(
+              sock,
+              jid,
+              `🔒 ${PREFIX}generate is for Premium / VIP users only.\n\n/premium to get premium.`,
+              message
+            );
+            return;
+          }
+
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}generate <text>`,
+              message
+            );
+            return;
+          }
+
+          await sendText(
+            sock,
+            jid,
+            `🤖 Generating with AI...\n\n⏳ Please wait...`,
+            message
+          );
+
+          const result = await generateAI(argument);
+          await sendText(
+            sock,
+            jid,
+            result,
+            message
+          );
+          return;
+        }
+
+        // ===================================================
+        // FUN COMMANDS
+        // ===================================================
+
+        if (command === "hug") {
+          const mentions = getMentions(message);
+
+          if (!mentions.length) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Tag someone to hug.`,
+              message
+            );
+            return;
+          }
+
+          await doAction(
+            sock,
+            jid,
+            mentions[0],
+            "hug",
+            message
+          );
+          return;
+        }
+
+        if (command === "slap") {
+          const mentions = getMentions(message);
+
+          if (!mentions.length) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Tag someone to slap.`,
+              message
+            );
+            return;
+          }
+
+          await doAction(
+            sock,
+            jid,
+            mentions[0],
+            "slap",
+            message
+          );
+          return;
+        }
+
+        // ===================================================
+        // DOWNLOAD
+        // ===================================================
+
+        if (command === "download") {
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}download <URL>`,
+              message
+            );
+            return;
+          }
+
+          const cooldown = checkDownloadLimit(sender);
+
+          if (!cooldown.allowed) {
+            const wait = formatTime(cooldown.wait);
+            await sendText(
+              sock,
+              jid,
+              `⏳ Download cooldown active.\n\nWait: ${wait}`,
+              message
+            );
+            return;
+          }
+
+          useDownloadCredit(sender);
+
+          await sendText(
+            sock,
+            jid,
+            `📥 Downloading from: ${argument}\n\n⏳ Please wait...`,
+            message
+          );
+
+          try {
+            const response = await axios.get(
+              argument,
+              {
+                responseType: "arraybuffer",
+                timeout: 60000
+              }
+            );
+
+            const contentType = response.headers["content-type"];
+            const isVideo = contentType?.includes("video");
+            const isImage = contentType?.includes("image");
+
+            if (isVideo) {
+              await sock.sendMessage(
+                jid,
+                {
+                  video: response.data,
+                  caption: `📹 Downloaded`
+                },
+                {
+                  quoted: message
+                }
+              );
+            } else if (isImage) {
+              await sock.sendMessage(
+                jid,
+                {
+                  image: response.data,
+                  caption: `🖼️ Downloaded`
+                },
+                {
+                  quoted: message
+                }
+              );
+            } else {
+              await sock.sendMessage(
+                jid,
+                {
+                  document: response.data,
+                  fileName: `download_${Date.now()}`,
+                  mimetype: contentType || "application/octet-stream"
+                },
+                {
+                  quoted: message
+                }
+              );
+            }
+          } catch (error) {
+            console.error("DOWNLOAD ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to download. Check the URL.`,
+              message
+            );
+          }
+          return;
+        }
+
+        // ===================================================
+        // GROUP COMMANDS
+        // ===================================================
+
+        if (command === "groupinfo") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          const metadata = await getGroupMetadata(sock, jid);
+
+          if (!metadata) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to get group info.`,
+              message
+            );
+            return;
+          }
+
+          const info = `
+╭━━━〔 GROUP INFO 〕━━━╮
+┃
+┃ 📛 Name: ${metadata.subject}
+┃ 🆔 ID: ${metadata.id}
+┃ 👥 Members: ${metadata.participants.length}
+┃ 📝 Desc: ${metadata.desc || "No description"}
+┃ 👑 Owner: ${metadata.owner ? `@${jidNumber(metadata.owner)}` : "Unknown"}
+┃
+╰━━━━━━━━━━━━━━━━━╯
+`;
+
+          await sendText(
+            sock,
+            jid,
+            info,
+            message
+          );
+          return;
+        }
+
+        if (command === "tagall") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireBotAdmin(sock, jid, message)) {
+            return;
+          }
+
+          const metadata = await getGroupMetadata(sock, jid);
+
+          if (!metadata) {
+            return;
+          }
+
+          const mentions = metadata.participants.map(p => p.id);
+          const text = `📢 Attention everyone!\n\n${mentions.map(m => `@${jidNumber(m)}`).join(" ")}`;
+
+          await sendText(
+            sock,
+            jid,
+            text,
+            message,
+            mentions
+          );
+          return;
+        }
+
+        if (command === "link") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireBotAdmin(sock, jid, message)) {
+            return;
+          }
+
+          try {
+            const link = await sock.groupInviteCode(jid);
+            await sendText(
+              sock,
+              jid,
+              `🔗 Group Link:\n\nhttps://chat.whatsapp.com/${link}`,
+              message
+            );
+          } catch (error) {
+            console.error("LINK ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to get group link.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "kick") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireSenderAdmin(sock, jid, sender, message)) {
+            return;
+          }
+
+          const mentions = getMentions(message);
+
+          if (!mentions.length) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Tag someone to kick.`,
+              message
+            );
+            return;
+          }
+
+          try {
+            await sock.groupParticipantsUpdate(
+              jid,
+              mentions,
+              "remove"
+            );
+
+            await sendText(
+              sock,
+              jid,
+              `👋 Kicked ${mentions.map(m => `@${jidNumber(m)}`).join(", ")}`,
+              message,
+              mentions
+            );
+          } catch (error) {
+            console.error("KICK ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to kick.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "add") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireBotAdmin(sock, jid, message)) {
+            return;
+          }
+
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}add <number>`,
+              message
+            );
+            return;
+          }
+
+          const toAdd = numberToJid(argument);
+
+          try {
+            await sock.groupParticipantsUpdate(
+              jid,
+              [toAdd],
+              "add"
+            );
+
+            await sendText(
+              sock,
+              jid,
+              `✅ Added @${cleanNumber(argument)} to the group.`,
+              message,
+              [toAdd]
+            );
+          } catch (error) {
+            console.error("ADD ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to add member.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "promote") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireSenderAdmin(sock, jid, sender, message)) {
+            return;
+          }
+
+          const mentions = getMentions(message);
+
+          if (!mentions.length) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Tag someone to promote.`,
+              message
+            );
+            return;
+          }
+
+          try {
+            await sock.groupParticipantsUpdate(
+              jid,
+              mentions,
+              "promote"
+            );
+
+            await sendText(
+              sock,
+              jid,
+              `👑 Promoted ${mentions.map(m => `@${jidNumber(m)}`).join(", ")}`,
+              message,
+              mentions
+            );
+          } catch (error) {
+            console.error("PROMOTE ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to promote.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "demote") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          if (!await requireSenderAdmin(sock, jid, sender, message)) {
+            return;
+          }
+
+          const mentions = getMentions(message);
+
+          if (!mentions.length) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Tag someone to demote.`,
+              message
+            );
+            return;
+          }
+
+          try {
+            await sock.groupParticipantsUpdate(
+              jid,
+              mentions,
+              "demote"
+            );
+
+            await sendText(
+              sock,
+              jid,
+              `📉 Demoted ${mentions.map(m => `@${jidNumber(m)}`).join(", ")}`,
+              message,
+              mentions
+            );
+          } catch (error) {
+            console.error("DEMOTE ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to demote.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "leave") {
+          if (!await requireGroup(sock, jid, message)) {
+            return;
+          }
+
+          try {
+            await sock.groupLeave(jid);
+          } catch (error) {
+            console.error("LEAVE ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to leave group.`,
+              message
+            );
+          }
+          return;
+        }
+
+        // ===================================================
+        // PAIRING
+        // ===================================================
+
+        if (command === "pair") {
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}pair <WhatsApp number>`,
+              message
+            );
+            return;
+          }
+
+          try {
+            await sendText(
+              sock,
+              jid,
+              `📱 Generating pairing code for: ${argument}\n\n⏳ Please wait...`,
+              message
+            );
+
+            const code = await createPairingCode(argument);
+
+            await sendText(
+              sock,
+              jid,
+              `✅ Pairing code:\n\n${code}`,
+              message
+            );
+          } catch (error) {
+            console.error("PAIR ERROR:", error.message);
+            await sendText(
+              sock,
+              jid,
+              `❌ Failed to generate pairing code.`,
+              message
+            );
+          }
+          return;
+        }
+
+        // ===================================================
+        // PREMIUM
+        // ===================================================
+
+        if (command === "premium") {
+          const level = getLevel(sender);
+
+          if (level !== "NORMAL") {
+            await sendText(
+              sock,
+              jid,
+              `✅ You already have ${level} access!`,
+              message
+            );
+            return;
+          }
+
+          await sendText(
+            sock,
+            jid,
+            `💎 Premium Features:\n\n🔓 Unlimited AI generation\n🎨 50 images / 8 hours\n📥 Unlimited downloads\n\n📞 Contact owner:\nhttps://wa.me/${cleanNumber(OWNER_NUMBER)}`,
+            message
+          );
+          return;
+        }
+
+        // ===================================================
+        // OWNER COMMANDS
+        // ===================================================
+
+        if (command === "addpremium") {
+          if (!isOwner(sender)) {
+            await sendText(
+              sock,
+              jid,
+              `🔒 Owner only.`,
+              message
+            );
+            return;
+          }
+
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}addpremium <number>`,
+              message
+            );
+            return;
+          }
+
+          if (addPremium(argument)) {
+            await sendText(
+              sock,
+              jid,
+              `✅ Added ${argument} to premium.`,
+              message
+            );
+          } else {
+            await sendText(
+              sock,
+              jid,
+              `ℹ️ ${argument} already premium.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "delpremium") {
+          if (!isOwner(sender)) {
+            await sendText(
+              sock,
+              jid,
+              `🔒 Owner only.`,
+              message
+            );
+            return;
+          }
+
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}delpremium <number>`,
+              message
+            );
+            return;
+          }
+
+          if (removePremium(argument)) {
+            await sendText(
+              sock,
+              jid,
+              `✅ Removed ${argument} from premium.`,
+              message
+            );
+          } else {
+            await sendText(
+              sock,
+              jid,
+              `ℹ️ ${argument} not in premium.`,
+              message
+            );
+          }
+          return;
+        }
+
+        if (command === "addvip") {
+          if (!isOwner(sender)) {
+            await sendText(
+              sock,
+              jid,
+              `🔒 Owner only.`,
+              message
+            );
+            return;
+          }
+
+          if (!argument) {
+            await sendText(
+              sock,
+              jid,
+              `❌ Usage: ${PREFIX}addvip <number>`,
+              message
+            );
+            return;
+          }
+
+          if (addVIP(argument))
